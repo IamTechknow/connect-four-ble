@@ -39,6 +39,7 @@
 #include "bsp_btn_ble.h"
 #include "nrf_delay.h"
 #include "SEGGER_RTT.h"
+#include "main.h"
 
 #define IS_SRVC_CHANGED_CHARACT_PRESENT 0                                           /**< Include the service_changed characteristic. If not enabled, the server's database cannot be changed for the lifetime of the device. */
 
@@ -505,6 +506,12 @@ static void buttons_leds_init(bool * p_erase_bonds)
     *p_erase_bonds = (startup_event == BSP_EVENT_CLEAR_BONDING_DATA);
 }
 
+static void gpio_init(void) {
+	int gpios[12] = {R1, G1, B1, R2, G2, B2, A, B, C, LAT, CLK, OE};
+	for(int i = 0; i < 12; i++)
+		nrf_gpio_pin_dir_set(gpios[i], NRF_GPIO_PIN_DIR_OUTPUT);
+}
+
 
 /**@brief Function for placing the application in low power state while waiting for events.
  */
@@ -521,7 +528,6 @@ int main(void)
 {
     uint32_t err_code;
     bool erase_bonds;
-	int c;
 
     // Initialize.
     APP_TIMER_INIT(APP_TIMER_PRESCALER, APP_TIMER_OP_QUEUE_SIZE, false);
@@ -533,6 +539,7 @@ int main(void)
     services_init();
     advertising_init();
     conn_params_init();
+	gpio_init();
 
     err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
     APP_ERROR_CHECK(err_code);
