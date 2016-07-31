@@ -37,6 +37,3 @@
 
 # Build directory
 pca10040/s132/armgcc/_build
-
-# Config directory
-config/
