@@ -73,7 +73,6 @@ static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;
 
 static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}};  /**< Universally unique service identifier. */
 
-
 /**@brief Function for assert macro callback.
  *
  * @details This function will be called in case of an assert in the SoftDevice.
@@ -506,6 +505,29 @@ static void buttons_leds_init(bool * p_erase_bonds)
     *p_erase_bonds = (startup_event == BSP_EVENT_CLEAR_BONDING_DATA);
 }
 
+
+/**@brief Function for handling timer expiration events, used to update RGB LED Display
+ */
+static void timer_handler(void * p_context) {
+	//For now toggle a port
+	nrf_gpio_pin_toggle(R1);
+}
+
+
+/**@brief Function for initializing the timer module and starting a timer with a handler that runs when it expires
+ */
+static void timer_init(void) {
+	APP_TIMER_DEF(timer_id); //Macro takes care of variable declaration
+	
+	uint32_t err_code = app_timer_create(&timer_id, APP_TIMER_MODE_REPEATED, timer_handler);
+	APP_ERROR_CHECK(err_code);
+	err_code = app_timer_start(timer_id, APP_TIMER_TICKS(REFRESH_TIME, APP_TIMER_PRESCALER), NULL);
+	APP_ERROR_CHECK(err_code);
+}
+
+
+/**@brief Function for initializing the timer module and starting a timer with a handler that runs when it expires
+ */
 static void gpio_init(void) {
 	int gpios[12] = {R1, G1, B1, R2, G2, B2, A, B, C, LAT, CLK, OE};
 	for(int i = 0; i < 12; i++)
@@ -540,6 +562,7 @@ int main(void)
     advertising_init();
     conn_params_init();
 	gpio_init();
+	timer_init(); //timer task to refresh RGB LED Board
 
     err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
     APP_ERROR_CHECK(err_code);
