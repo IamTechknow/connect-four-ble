@@ -22,6 +22,7 @@
  */
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 #include "nordic_common.h"
 #include "nrf.h"
@@ -74,8 +75,8 @@ static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;
 static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}};  /**< Universally unique service identifier. */
 
 //global variables for LED display, game
-uint8_t discs[COLS], home[WIDTH], game[COLS][ROWS-1];
-uint8_t whichInput, row, i, disc_pos;
+uint8_t discs[COLS], home[WIDTH], game[COLS][ROWS];
+uint8_t whichInput, row, i, disc_pos, game_over;
 
 /**@brief Function for assert macro callback.
  *
@@ -565,7 +566,7 @@ static void timer_handler(void * p_context) {
     nrf_gpio_pin_clear(LAT);
     nrf_gpio_pin_clear(OE);
     
-	row = row == ROWS - 1 ? 0 : row + 1;
+	row = row == ROWS ? 0 : row + 1;
 }
 
 
@@ -598,22 +599,139 @@ static void power_manage(void)
     APP_ERROR_CHECK(err_code);
 }
 
+/**@brief Check if there is a win. This is a simple constant-space linear-time algorithm that checks 
+ *		  throughout the game board for four consecutive elements in a row, column, or diagonal
+ *        By given the row and column to check it only has to check the current row, column and diagonals
+		  FIXME: Doesn't work yet, col_i index seems to overflow
+ */
+uint8_t checkWin(uint8_t row, uint8_t col) {
+	uint8_t row_i = 0, col_i = 0, moves = 0, curr_player = RED;
+	
+	for(; col_i < WIDTH; col_i++) { //Current row
+        uint8_t color = game[row][col_i]; //current disc color
+        
+        if(color == BLUE) {
+			if(curr_player == RED) { //different color? new sequence
+                curr_player = BLUE;
+                moves = 1;
+            } else
+                moves++;
+		} else if(color == RED) {
+			if(curr_player == BLUE) {
+				curr_player = RED;
+				moves = 1;
+			} else
+				moves++;
+		} else //no disc, reset
+			moves = 0;
+        
+        if(moves == 4)
+            return curr_player;
+    }
+	
+	for(moves = 0; row_i < ROWS; row_i++) { //Current column
+        uint8_t color = game[row_i][col];
+        
+        if(color == BLUE) {
+			if(curr_player == RED) {
+                curr_player = BLUE;
+                moves = 1;
+            } else
+                moves++;
+		} else if(color == RED) {
+			if(curr_player == BLUE) {
+				curr_player = RED;
+				moves = 1;
+			} else
+				moves++;
+		} else 
+            moves = 0;
+        
+        if(moves == 4)
+            return curr_player;
+    }
+	
+	//Right diagonal - first go backwards until either c or r is zero
+	row_i = row, col_i = col;
+	while(row_i > 0 && col_i > 0) {
+        row_i--; col_i--;
+    }
+	
+	for(moves = 0; row_i < ROWS && col_i < WIDTH;) {
+        uint8_t color = game[row_i][col_i];
+        
+        if(color == BLUE) {
+			if(curr_player == RED) {
+                curr_player = BLUE;
+                moves = 1;
+            } else
+                moves++;
+		} else if(color == RED) {
+			if(curr_player == BLUE) {
+				curr_player = RED;
+				moves = 1;
+			} else
+				moves++;
+		} else 
+            moves = 0;
+        
+        if(moves == 4)
+            return curr_player;
+        
+        row_i++; col_i++;
+    }
+	
+	//Left diagonal - go right and up first, then go left and down
+	row_i = row, col_i = col; moves = 0;
+    while(row_i > 0 && col_i < WIDTH) {
+        row_i--; col_i++;
+    }
+    
+    while(row_i < ROWS && col_i > 0) { //winning condition should be checked at left edge
+        uint8_t color = game[row_i][col_i];
+        
+        if(color == BLUE) {
+			if(curr_player == RED) {
+                curr_player = BLUE;
+                moves = 1;
+            } else
+                moves++;
+		} else if(color == RED) {
+			if(curr_player == BLUE) {
+				curr_player = RED;
+				moves = 1;
+			} else
+				moves++;
+		} else 
+            moves = 0;
+        
+        if(moves == 4)
+            return curr_player;
+        
+        row_i++; col_i--;
+    }
+    return 0;
+}
+
 /**@brief Update the game, given a location to place the disc
  */
 void updateGame(uint8_t row, uint8_t col) {
-    if(discs[row] < 15) {
+	if(game_over)
+		SEGGER_RTT_WriteString(0, "Game is over!\n");
+    else if(discs[row] < 15) {
         col = discs[row]++;
         
 		char temp_[24];
 		sprintf(temp_, "Disc added at %d, %d\n", row, col);
 		SEGGER_RTT_WriteString(0, temp_);
 		
-        game[row][col] = (state == PLAYER2) ? BLUE : RED;
-        /* if(checkWin(row, col)) {
+        game[row][col] = RED;
+        if(checkWin(row, col)) {
+			game_over = 1;
             char temp[40];
             sprintf(temp, "Winning move detected at %d, %d\n", row, col);
             SEGGER_RTT_WriteString(0, temp);
-        } */
+        }
     } else
         SEGGER_RTT_WriteString(0, "No more moves may be made on this column\n");
 }
@@ -623,8 +741,8 @@ void game_init(void) {
 	memset(discs, 0, sizeof discs); 
 	memset(home, 0, sizeof home);
 	home[0] = RED;
-	memset(game, 0, sizeof(game[0][0]) * COLS * ROWS-1);
-	whichInput = row = i = disc_pos = 0;
+	memset(game, 0, sizeof(game[0][0]) * COLS * ROWS);
+	whichInput = row = i = disc_pos = game_over = 0;
 }
 
 

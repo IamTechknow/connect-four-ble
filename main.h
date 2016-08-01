@@ -9,11 +9,12 @@ enum STATES {INIT, CONNECT, CONNECTED, PLAYER1, PLAYER2, SENDDATA, WAIT_FOR_DATA
 //Constants
 #define BLUE 1
 #define RED 4
-#define ROWS 16
+#define ROWS 15 //Rows in game, minus row home
 #define COLS 16
-#define WIDTH 16
-#define RBG_WIDTH 32
+#define WIDTH 16 
+#define RBG_WIDTH 32 //All the LEDs on one row of the matrix
 #define REFRESH_TIME 1
+#define MOVES 4
 
 //Keyboard event codes
 #define LEFT 'a'
