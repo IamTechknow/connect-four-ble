@@ -74,7 +74,7 @@ static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;
 static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}};  /**< Universally unique service identifier. */
 
 //global variables for LED display, game
-uint8_t discs[COLS] = {0}, home[WIDTH] = {RED, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, game[ROWS-1][COLS] = {{0}};
+uint8_t discs[COLS] = {0}, home[WIDTH] = {RED, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, game[COLS][ROWS-1] = {{0}};
 uint8_t whichInput = 0, row = 0, i = 0, disc_pos = 0;
 
 /**@brief Function for assert macro callback.
