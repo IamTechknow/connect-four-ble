@@ -73,6 +73,21 @@ static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;
 
 static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}};  /**< Universally unique service identifier. */
 
+//Matrices to indicate color for display
+uint8_t red[4][4] = {{1,1,1,1},
+                   {1,1,0,1},
+                   {1,0,1,1},
+                   {1,1,1,1}}, 
+    green[4][4] = {{1,0,0,1},
+                   {0,1,1,0},
+                   {0,1,1,0},
+                   {1,0,0,1}}, 
+     blue[4][4] = {{1,0,0,1},
+                   {0,1,1,0},
+                   {0,1,1,0},
+                   {1,0,0,1}};
+uint8_t row = 0;
+
 /**@brief Function for assert macro callback.
  *
  * @details This function will be called in case of an assert in the SoftDevice.
@@ -486,6 +501,22 @@ static void advertising_init(void)
 }
 
 
+static void Row_Write(uint8_t row) {
+	//Get the row bits
+	uint8_t row1 = row & 1, row2 = row & (1 << 1), row3 = row & (1 << 2);
+	nrf_gpio_pin_write(A, row1);
+	nrf_gpio_pin_write(B, row2);
+	nrf_gpio_pin_write(C, row3);
+}
+
+
+static void Color_Write(uint8_t r, uint8_t g, uint8_t b) {
+	nrf_gpio_pin_write(R1, r);
+	nrf_gpio_pin_write(G1, g);
+	nrf_gpio_pin_write(B1, b);
+}
+
+
 /**@brief Function for initializing buttons and leds.
  *
  * @param[out] p_erase_bonds  Will be true if the clear bonding button was pressed to wake the application up.
@@ -509,10 +540,29 @@ static void buttons_leds_init(bool * p_erase_bonds)
 /**@brief Function for handling timer expiration events, used to update RGB LED Display
  */
 static void timer_handler(void * p_context) {
-	//For now toggle a port
-	nrf_gpio_pin_toggle(R1);
-}
+	nrf_gpio_pin_set(OE);
+	
+	if(row == 4) 
+		row = 0;
+	
+	Row_Write(row);
 
+    for(uint8_t i = 0; i < 32; i++) { //assume start is zero
+        if(i < 4)
+            Color_Write(red[row][i], blue[row][i], green[row][i]);
+        else //end refers to first LED not lit. Here blank the rest out
+            Color_Write(0, 0, 0);
+
+        nrf_gpio_pin_set(CLK);
+        nrf_gpio_pin_clear(CLK);
+    }
+    nrf_gpio_pin_set(LAT);
+    nrf_delay_us(100); //Give enough time for latch to save
+    nrf_gpio_pin_clear(LAT);
+    nrf_gpio_pin_clear(OE);
+    
+    row++;
+}
 
 /**@brief Function for initializing the timer module and starting a timer with a handler that runs when it expires
  */
@@ -529,8 +579,8 @@ static void timer_init(void) {
 /**@brief Function for initializing the timer module and starting a timer with a handler that runs when it expires
  */
 static void gpio_init(void) {
-	int gpios[12] = {R1, G1, B1, R2, G2, B2, A, B, C, LAT, CLK, OE};
-	for(int i = 0; i < 12; i++)
+	uint8_t gpios[12] = {R1, G1, B1, R2, G2, B2, A, B, C, LAT, CLK, OE};
+	for(uint8_t i = 0; i < 12; i++)
 		nrf_gpio_pin_dir_set(gpios[i], NRF_GPIO_PIN_DIR_OUTPUT);
 }
 
