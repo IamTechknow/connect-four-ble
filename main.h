@@ -15,6 +15,12 @@ enum STATES {INIT, CONNECT, CONNECTED, PLAYER1, PLAYER2, SENDDATA, WAIT_FOR_DATA
 #define RBG_WIDTH 32
 #define REFRESH_TIME 1
 
+//Keyboard event codes
+#define LEFT 'a'
+#define RIGHT 'd'
+#define DOWN 's'
+#define HOME 'h'
+
 //Pin declarations
 #define R1 ARDUINO_A0_PIN //RGB bits, rows 0-7
 #define G1 ARDUINO_A1_PIN

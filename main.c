@@ -73,20 +73,9 @@ static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;
 
 static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}};  /**< Universally unique service identifier. */
 
-//Matrices to indicate color for display
-uint8_t red[4][4] = {{1,1,1,1},
-                   {1,1,0,1},
-                   {1,0,1,1},
-                   {1,1,1,1}}, 
-    green[4][4] = {{1,0,0,1},
-                   {0,1,1,0},
-                   {0,1,1,0},
-                   {1,0,0,1}}, 
-     blue[4][4] = {{1,0,0,1},
-                   {0,1,1,0},
-                   {0,1,1,0},
-                   {1,0,0,1}};
-uint8_t row = 0;
+//global variables for LED display, game
+uint8_t discs[COLS] = {0}, home[WIDTH] = {RED, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, game[ROWS-1][COLS] = {{0}};
+uint8_t whichInput = 0, row = 0, i = 0, disc_pos = 0;
 
 /**@brief Function for assert macro callback.
  *
@@ -510,10 +499,19 @@ static void Row_Write(uint8_t row) {
 }
 
 
-static void Color_Write(uint8_t r, uint8_t g, uint8_t b) {
-	nrf_gpio_pin_write(R1, r);
-	nrf_gpio_pin_write(G1, g);
-	nrf_gpio_pin_write(B1, b);
+static void Color_Write(uint8_t rgb) {
+	uint8_t blue = rgb & 1, green = rgb & (1 << 1), red = rgb & (1 << 2);
+	nrf_gpio_pin_write(R1, red);
+	nrf_gpio_pin_write(G1, green);
+	nrf_gpio_pin_write(B1, blue);
+}
+
+
+static void Color2_Write(uint8_t rgb) {
+	uint8_t blue = rgb & 1, green = rgb & (1 << 1), red = rgb & (1 << 2);
+	nrf_gpio_pin_write(R2, red);
+	nrf_gpio_pin_write(G2, green);
+	nrf_gpio_pin_write(B2, blue);
 }
 
 
@@ -537,21 +535,27 @@ static void buttons_leds_init(bool * p_erase_bonds)
 }
 
 
-/**@brief Function for handling timer expiration events, used to update RGB LED Display
+/**@brief Function for handling timer expiration events, used to update RGB LED Display. The display is bottom side up, LEDs are displayed from the top
  */
 static void timer_handler(void * p_context) {
 	nrf_gpio_pin_set(OE);
-	
-	if(row == 4) 
-		row = 0;
-	
 	Row_Write(row);
 
-    for(uint8_t i = 0; i < 32; i++) { //assume start is zero
-        if(i < 4)
-            Color_Write(red[row][i], blue[row][i], green[row][i]);
-        else //end refers to first LED not lit. Here blank the rest out
-            Color_Write(0, 0, 0);
+    for(uint8_t i = 0; i < RBG_WIDTH; i++) { //assume start is zero
+        if(i < WIDTH) {
+			//Draw top half
+			if(row < 8) {
+				if(row == 0)
+					Color_Write(home[i]); //draw current cursor position
+				else
+					Color_Write(game[i][row - 1]); //i and row are switched, otherwise it'd draw horizontially
+			} else { //Draw bottom half
+				Color2_Write(game[i][row - 1]); 
+			}
+        } else { //Blank the rest out
+            Color_Write(0);
+			Color2_Write(0);
+		}
 
         nrf_gpio_pin_set(CLK);
         nrf_gpio_pin_clear(CLK);
@@ -561,8 +565,9 @@ static void timer_handler(void * p_context) {
     nrf_gpio_pin_clear(LAT);
     nrf_gpio_pin_clear(OE);
     
-    row++;
+	row = row == ROWS - 1 ? 0 : row + 1;
 }
+
 
 /**@brief Function for initializing the timer module and starting a timer with a handler that runs when it expires
  */
@@ -591,6 +596,64 @@ static void power_manage(void)
 {
     uint32_t err_code = sd_app_evt_wait();
     APP_ERROR_CHECK(err_code);
+}
+
+/**@brief Update the game, given a location to place the disc
+ */
+void updateGame(uint8_t row, uint8_t col) {
+    if(discs[row] < 15) {
+        col = discs[row]++;
+        
+		char temp_[24];
+		sprintf(temp_, "Disc added at %d, %d\n", row, col);
+		SEGGER_RTT_WriteString(0, temp_);
+		
+        game[row][col] = (state == PLAYER2) ? BLUE : RED;
+        /* if(checkWin(row, col)) {
+            char temp[40];
+            sprintf(temp, "Winning move detected at %d, %d\n", row, col);
+            SEGGER_RTT_WriteString(0, temp);
+        } */
+    } else
+        SEGGER_RTT_WriteString(0, "No more moves may be made on this column\n");
+}
+
+
+void moveDisc(int8_t whichInput) {
+    //Respond to keystroke
+    switch(whichInput) {
+        case LEFT:
+            if(disc_pos > 0) {
+                home[disc_pos--] = 0;
+                home[disc_pos] = RED;
+            } 
+            break;
+        case RIGHT:
+            if(disc_pos < WIDTH-1) {    
+                home[disc_pos++] = 0;
+                home[disc_pos] = RED;
+            }    
+            break;
+        case HOME:
+            if(disc_pos != 0) {
+                home[disc_pos] = 0;
+                disc_pos = 0;
+                home[disc_pos] = RED;
+            }
+            break;
+        case DOWN: //Update discs then game array
+            updateGame(disc_pos, discs[disc_pos]);
+            break;
+        default: //negative value due to nothing read (non-blocking)
+            ;
+    }
+}
+
+
+//Detect Keystroke
+int8_t getInput() {
+    int8_t curr_char = SEGGER_RTT_GetKey();
+    return curr_char;
 }
 
 
@@ -623,6 +686,7 @@ int main(void)
     for (;;)
     {
         power_manage();
+		moveDisc(getInput());
     }
 }
 
