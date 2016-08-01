@@ -20,6 +20,8 @@ enum STATES {INIT, CONNECT, CONNECTED, PLAYER1, PLAYER2, SENDDATA, WAIT_FOR_DATA
 #define RIGHT 'd'
 #define DOWN 's'
 #define HOME 'h'
+#define RESET 'R'
+#define CLEAR 'C'
 
 //Pin declarations
 #define R1 ARDUINO_A0_PIN //RGB bits, rows 0-7

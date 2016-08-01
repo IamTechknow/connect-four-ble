@@ -74,8 +74,8 @@ static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;
 static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}};  /**< Universally unique service identifier. */
 
 //global variables for LED display, game
-uint8_t discs[COLS] = {0}, home[WIDTH] = {RED, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, game[COLS][ROWS-1] = {{0}};
-uint8_t whichInput = 0, row = 0, i = 0, disc_pos = 0;
+uint8_t discs[COLS], home[WIDTH], game[COLS][ROWS-1];
+uint8_t whichInput, row, i, disc_pos;
 
 /**@brief Function for assert macro callback.
  *
@@ -619,6 +619,15 @@ void updateGame(uint8_t row, uint8_t col) {
 }
 
 
+void game_init(void) {
+	memset(discs, 0, sizeof discs); 
+	memset(home, 0, sizeof home);
+	home[0] = RED;
+	memset(game, 0, sizeof(game[0][0]) * COLS * ROWS-1);
+	whichInput = row = i = disc_pos = 0;
+}
+
+
 void moveDisc(int8_t whichInput) {
     //Respond to keystroke
     switch(whichInput) {
@@ -644,6 +653,11 @@ void moveDisc(int8_t whichInput) {
         case DOWN: //Update discs then game array
             updateGame(disc_pos, discs[disc_pos]);
             break;
+		case RESET:
+		case CLEAR:
+			SEGGER_RTT_WriteString(0, "Resetting game\n");
+			game_init();
+			break;
         default: //negative value due to nothing read (non-blocking)
             ;
     }
@@ -676,6 +690,7 @@ int main(void)
     conn_params_init();
 	gpio_init();
 	timer_init(); //timer task to refresh RGB LED Board
+	game_init();
 
     err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
     APP_ERROR_CHECK(err_code);
