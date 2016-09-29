@@ -81,7 +81,10 @@ static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, 
 
 //global variables for LED display, game
 uint8_t discs[COLS], home[WIDTH], game[COLS][ROWS];
-uint8_t whichInput, row, i, disc_pos;
+uint8_t whichInput, row, i, disc_pos, p1_turn;
+
+//Variables to get data from BLE connection
+unsigned int *ble_row;
 
 /**@brief Function for assert macro callback.
  *
@@ -148,6 +151,22 @@ static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t lengt
     }
     while (app_uart_put('\r') != NRF_SUCCESS);
     while (app_uart_put('\n') != NRF_SUCCESS);
+	
+	//Copy uint8_t array to string array then use sscanf
+	char temp[length+1];
+	for(int i = 0; i < length; i++)
+		temp[i] = p_data[i];
+	temp[length] = '\0';
+	
+	//Parse row number
+	unsigned int num;
+	sscanf(temp, "%u", &num);
+	SEGGER_RTT_printf(0, "\nPlayer 2 dropped disc at column %u\n", num);
+	if(num < 0 || num > COLS)
+		SEGGER_RTT_printf(0, "\nThat's not a valid column\n");
+	else {
+		
+	}
 }
 /**@snippet [Handling the data received over BLE] */
 
@@ -673,16 +692,35 @@ static void gpio_init(void) {
 /**@brief Update the game, given a location to place the disc
  */
 void updateGame(uint8_t row, uint8_t col) {
-	if(discs[row] < 15) {
-        col = discs[row]++;
-        
-		char temp_[24];
-		sprintf(temp_, "\nDisc added at %d, %d\n", row, col);
-		SEGGER_RTT_WriteString(0, temp_);
+	if(p1_turn) {
+		if(discs[row] < 15) {
+			col = discs[row]++;
+			
+			char temp_[24];
+			sprintf(temp_, "\nDisc added at %d, %d\n", row, col);
+			SEGGER_RTT_WriteString(0, temp_);
+			
+			game[row][col] = RED;
+			
+			//Send data to Bluetooth connection
+			char temp[14]; 
+			uint8_t send[14];
+			sprintf(temp, "Received %d %d", row, col);
+			uint8_t i = 0;
+			while(temp[i] != '\0') { //Accounts for 1 or 2 digit numbers
+				send[i] = temp[i];
+				i++;
+			}
 		
-        game[row][col] = RED;
-    } else
-        SEGGER_RTT_WriteString(0, "\nNo more moves may be made on this column\n");
+			uint32_t err_code = ble_nus_string_send(&m_nus, send, i);
+			if(err_code != NRF_SUCCESS)
+				APP_ERROR_CHECK(err_code);
+			//p1_turn = false;
+		} else
+			SEGGER_RTT_WriteString(0, "\nNo more moves may be made on this column\n");
+	} else {
+		
+	}
 }
 
 
@@ -692,6 +730,7 @@ void game_init(void) {
 	home[0] = RED;
 	memset(game, 0, sizeof(game[0][0]) * COLS * ROWS);
 	whichInput = row = i = disc_pos = 0;
+	p1_turn = true;
 	
 	//Print instructions
 	SEGGER_RTT_WriteString(0, "\nConnect Four BLE instructions:\n a - Move disc left\n d - Move disc right\n s - Insert disc\n h - back to first slot\n R or C - Reset game\n");
