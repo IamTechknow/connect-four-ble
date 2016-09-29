@@ -81,7 +81,7 @@ static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, 
 
 //global variables for LED display, game
 uint8_t discs[COLS], home[WIDTH], game[COLS][ROWS];
-uint8_t whichInput, row, i, disc_pos, game_over;
+uint8_t whichInput, row, i, disc_pos;
 
 /**@brief Function for assert macro callback.
  *
@@ -673,18 +673,16 @@ static void gpio_init(void) {
 /**@brief Update the game, given a location to place the disc
  */
 void updateGame(uint8_t row, uint8_t col) {
-	if(game_over)
-		SEGGER_RTT_WriteString(0, "Game is over!\n");
-    else if(discs[row] < 15) {
+	if(discs[row] < 15) {
         col = discs[row]++;
         
 		char temp_[24];
-		sprintf(temp_, "Disc added at %d, %d\n", row, col);
+		sprintf(temp_, "\nDisc added at %d, %d\n", row, col);
 		SEGGER_RTT_WriteString(0, temp_);
 		
         game[row][col] = RED;
     } else
-        SEGGER_RTT_WriteString(0, "No more moves may be made on this column\n");
+        SEGGER_RTT_WriteString(0, "\nNo more moves may be made on this column\n");
 }
 
 
@@ -693,7 +691,10 @@ void game_init(void) {
 	memset(home, 0, sizeof home);
 	home[0] = RED;
 	memset(game, 0, sizeof(game[0][0]) * COLS * ROWS);
-	whichInput = row = i = disc_pos = game_over = 0;
+	whichInput = row = i = disc_pos = 0;
+	
+	//Print instructions
+	SEGGER_RTT_WriteString(0, "\nConnect Four BLE instructions:\n a - Move disc left\n d - Move disc right\n s - Insert disc\n h - back to first slot\n R or C - Reset game\n");
 }
 
 
@@ -724,7 +725,7 @@ void moveDisc(int8_t whichInput) {
             break;
 		case RESET:
 		case CLEAR:
-			SEGGER_RTT_WriteString(0, "Resetting game\n");
+			SEGGER_RTT_WriteString(0, "\nResetting game\n");
 			game_init();
 			break;
         default: //negative value due to nothing read (non-blocking)
@@ -761,7 +762,6 @@ int main(void)
 	timer_init(); //timer task to refresh RGB LED Board
 	game_init();
 
-    printf("\r\nUART Start!\r\n");
     err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
     APP_ERROR_CHECK(err_code);
 
@@ -769,6 +769,7 @@ int main(void)
     for (;;)
     {
         power_manage();
+		moveDisc(getInput());
     }
 }
 
