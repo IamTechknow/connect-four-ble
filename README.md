@@ -17,5 +17,12 @@ Coming soon
 #Playing Connect Four from Segger RTT Viewer
 Open the Segger RTT Viewer application and connect to the nRF52 development kit. You may view printf messages sent from the system or send your own keystrokes from the terminal.
 
+#Debugging with GDB
+A J-Link remote server may be created to allow a GDB client to connect. Open the J-Link GDB Server program, set the config as a USB connection, target device nRF52832_xxAA (choose from Nordic Semi manufacturer), SWD interface. You may need to connect via J-Link commander if not already done so. Note the TCP/IP port, this is what you use to connect to the server on localhost. To connect, use GDB from GNU Tools ARM Embedded (arm-none-eabi-gdb). Open another terminal, go to where the build folder is, and type (assuming port 2331):
+``arm-none-eabi-gdb nrf52832_xxaa.out
+target remote localhost:2331
+break ../../../main.c:178
+``
+
 #License
 Currently under the license agreement from the Nordic Semiconductor ASA ("Nordic") Software Development Kit.
