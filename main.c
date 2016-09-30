@@ -165,9 +165,9 @@ static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t lengt
 	
 	//Check player status and input
 	if(p1_turn)
-		SEGGER_RTT_printf(0, "But it's not their turn yet!\n");
+		SEGGER_RTT_WriteString(0, "But it's not their turn yet!\n");
 	else if(num < 0 || num >= COLS)
-		SEGGER_RTT_printf(0, "That's not a valid column!\n");
+		SEGGER_RTT_WriteString(0, "That's not a valid column!\n");
 	else 
 		updateGame(num, discs[num]);
 }
@@ -513,7 +513,8 @@ static void power_manage(void)
     APP_ERROR_CHECK(err_code);
 }
 
-
+/**@brief Writes to the ABC pins which indicate the row number (0-7)
+ */
 static void Row_Write(uint8_t row) {
 	//Get the row bits
 	uint8_t row1 = row & 1, row2 = row & (1 << 1), row3 = row & (1 << 2);
@@ -522,7 +523,8 @@ static void Row_Write(uint8_t row) {
 	nrf_gpio_pin_write(C, row3);
 }
 
-
+/**@brief Writes to the Color 1 pins which indicate the LED color for the first 8 rows
+ */
 static void Color_Write(uint8_t rgb) {
 	uint8_t blue = rgb & 1, green = rgb & (1 << 1), red = rgb & (1 << 2);
 	nrf_gpio_pin_write(R1, red);
@@ -530,7 +532,8 @@ static void Color_Write(uint8_t rgb) {
 	nrf_gpio_pin_write(B1, blue);
 }
 
-
+/**@brief Writes to the Color 2 pins which indicate the LED color for the last 8 rows
+ */
 static void Color2_Write(uint8_t rgb) {
 	uint8_t blue = rgb & 1, green = rgb & (1 << 1), red = rgb & (1 << 2);
 	nrf_gpio_pin_write(R2, red);
@@ -540,6 +543,7 @@ static void Color2_Write(uint8_t rgb) {
 
 
 /**@brief Function for handling timer expiration events, used to update RGB LED Display. The display is bottom side up, LEDs are displayed from the top
+		  Runs every millisecond, to refresh the display at a rate of 1kHz.
  */
 static void timer_handler(void * p_context) {
 	nrf_gpio_pin_set(OE);
@@ -585,7 +589,7 @@ static void timer_init(void) {
 }
 
 
-/**@brief Function for initializing the timer module and starting a timer with a handler that runs when it expires
+/**@brief Function for initializing the GPIO pins as outputs
  */
 static void gpio_init(void) {
 	uint8_t gpios[12] = {R1, G1, B1, R2, G2, B2, A, B, C, LAT, CLK, OE};
@@ -594,7 +598,8 @@ static void gpio_init(void) {
 }
 
 
-
+/**@brief Function for initializing the game variables during startup or reset
+ */
 void game_init(void) {
 	memset(discs, 0, sizeof discs); 
 	memset(home, 0, sizeof home);
@@ -608,6 +613,9 @@ void game_init(void) {
 }
 
 
+/**@brief Function for responding to keyboard input. SEGGER_RTT_GetKey does not block and will return a negative value if there is no input.
+		  Checks if a bluetooth device is connected and if it is the player's turn before proceeding with the down key press.
+ */
 void moveDisc(int8_t whichInput) {
     //Respond to keystroke
     switch(whichInput) {
@@ -643,7 +651,7 @@ void moveDisc(int8_t whichInput) {
 			SEGGER_RTT_WriteString(0, "\nResetting game\n");
 			game_init();
 			break;
-        default: //negative value due to nothing read (non-blocking)
+        default:
             ;
     }
 }
