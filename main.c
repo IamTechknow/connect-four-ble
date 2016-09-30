@@ -81,10 +81,7 @@ static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, 
 
 //global variables for LED display, game
 uint8_t discs[COLS], home[WIDTH], game[COLS][ROWS];
-uint8_t whichInput, row, i, disc_pos, p1_turn;
-
-//Variables to get data from BLE connection
-unsigned int *ble_row;
+uint8_t whichInput, row, i, disc_pos, p1_turn, isConnected;
 
 /**@brief Function for assert macro callback.
  *
@@ -195,8 +192,12 @@ static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t lengt
 	unsigned int num;
 	sscanf(temp, "%u", &num);
 	SEGGER_RTT_printf(0, "\nPlayer 2 dropped disc at column %u\n", num);
-	if(num < 0 || num >= COLS)
-		SEGGER_RTT_printf(0, "\nThat's not a valid column\n");
+	
+	//Check player status and input
+	if(p1_turn)
+		SEGGER_RTT_printf(0, "\nBut it's not their turn yet!\n");
+	else if(num < 0 || num >= COLS)
+		SEGGER_RTT_printf(0, "\nThat's not a valid column!\n");
 	else 
 		updateGame(num, discs[num]);
 }
@@ -330,12 +331,16 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
     switch (p_ble_evt->header.evt_id)
     {
         case BLE_GAP_EVT_CONNECTED:
+			isConnected = true;
+			SEGGER_RTT_WriteString(0, "\nConnected to Bluetooth Device\n");
             err_code = bsp_indication_set(BSP_INDICATE_CONNECTED);
             APP_ERROR_CHECK(err_code);
             m_conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
             break; // BLE_GAP_EVT_CONNECTED
 
         case BLE_GAP_EVT_DISCONNECTED:
+			isConnected = false;
+			SEGGER_RTT_WriteString(0, "\nDisconnected from Bluetooth Device\n");
             err_code = bsp_indication_set(BSP_INDICATE_IDLE);
             APP_ERROR_CHECK(err_code);
             m_conn_handle = BLE_CONN_HANDLE_INVALID;
@@ -758,7 +763,12 @@ void moveDisc(int8_t whichInput) {
             }
             break;
         case DOWN: //Update discs then game array
-            updateGame(disc_pos, discs[disc_pos]);
+			if(!isConnected)
+				SEGGER_RTT_WriteString(0, "\nNot connected with another player yet!\n");
+			else if(!p1_turn)
+				SEGGER_RTT_WriteString(0, "\nUnable to place disc, not your turn yet!\n");
+			else
+				updateGame(disc_pos, discs[disc_pos]);
             break;
 		case RESET:
 		case CLEAR:
