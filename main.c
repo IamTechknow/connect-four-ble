@@ -73,9 +73,18 @@ static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;
 
 static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}};  /**< Universally unique service identifier. */
 
-//global variables for LED display, game
-uint8_t discs[COLS], home[WIDTH], game[COLS][ROWS];
-uint8_t whichInput, row, i, disc_pos, p1_turn, isConnected = 0;
+//Game State
+uint8_t discs[WIDTH], game[HEIGHT][WIDTH];
+
+//Player 1
+uint8_t p1_disc_col;
+uint8_t p1_home[WIDTH];
+
+//connection state, player turn
+uint8_t p1_turn, isConnected = 0;
+
+//Used for timer interrupt
+uint8_t curr_height = 0;
 
 
 /**@brief Function for the GAP initialization.
@@ -108,24 +117,89 @@ static void gap_params_init(void)
 }
 
 
+/**@brief Check if the game has been won.
+		  Given the inserted disc location, check the entire row and column for four discs of the same color
+		  Then check the diagonals by going left and up until it's not possible, then go down and right for left to right
+		  and for right to left go down and right to the end then reverse.
+ */
+uint8_t checkWin(uint8_t row, uint8_t col) {
+	//Get the player color from the disc that was just dropped
+	uint8_t count = 0, r = 0, c = 0, player_color = game[row][col], curr_color;
+	
+	for(; c < WIDTH; c++) { //check row
+		curr_color = game[row][c];
+		count = curr_color == player_color ? count + 1 : 0;
+
+		if(count == MOVES)
+			return true;
+	}
+	
+	for(count = 0; r < HEIGHT; r++) { //check column
+		curr_color = game[r][col];
+		count = curr_color == player_color ? count + 1 : 0;
+
+		if(count == MOVES)
+			return true;
+	}
+	
+	//Go to dropped disc and go down and left as much as possible, then check left-to-right diagonal
+	r = row;
+	c = col;
+
+	while(r != 0 && c != 0) {
+		r--;
+		c--;
+	}
+
+	for(count = 0; c < WIDTH && r < HEIGHT; c++) {
+		curr_color = game[r][c];
+		count = curr_color == player_color ? count + 1 : 0;
+
+		if(count == MOVES)
+			return true;
+		r++;
+	}
+
+	r = row; //Now go down and right as much as possible
+	c = col;
+
+	while(r > 0 && c < WIDTH - 1) {
+		r--;
+		c++;
+	}
+
+	for(count = 0; c >= 0 && r < HEIGHT; c--) {
+		curr_color = game[r][c];
+		count = curr_color == player_color ? count + 1 : 0;
+
+		if(count == MOVES)
+			return true;
+		r++;
+	}
+	
+	return false;
+}
+
+
 /**@brief Update the game, given a location to place the disc
  */
-void updateGame(uint8_t row, uint8_t col) {
-	uint8_t color = p1_turn ? RED : BLUE;
+void addToColumn(uint8_t col) {
+	uint8_t currColor = p1_turn ? RED : BLUE, row;
 	
-	if(discs[row] < 15) {
-		col = discs[row]++;
+	if(discs[col] < HEIGHT) {
+		//insert the disc
+		row = discs[col];
+		discs[col]++;
+		game[row][col] = currColor;
 		
 		char temp_[24];
-		sprintf(temp_, "\nDisc added at %d, %d\n", row, col);
+		sprintf(temp_, "\nDisc added at %d, %d\n", col, row);
 		SEGGER_RTT_WriteString(0, temp_);
-		
-		game[row][col] = color;
 		
 		//Send data to Bluetooth connection
 		char temp[14]; 
 		uint8_t send[14];
-		sprintf(temp, "Received %d %d", row, col);
+		sprintf(temp, "Received %d %d", col, row);
 		uint8_t i = 0;
 		while(temp[i] != '\0') { //Accounts for 1 or 2 digit numbers
 			send[i] = temp[i];
@@ -135,6 +209,19 @@ void updateGame(uint8_t row, uint8_t col) {
 		uint32_t err_code = ble_nus_string_send(&m_nus, send, i);
 		if(err_code != NRF_SUCCESS)
 			APP_ERROR_CHECK(err_code);
+		
+		//check if game is over
+		if(checkWin(row, col)) {
+			switch(p1_turn) {
+				case true:
+					SEGGER_RTT_WriteString(0, "Player 1 Wins!\n");
+					break;
+				default:
+					SEGGER_RTT_WriteString(0, "Player 2 Wins!\n");
+					break;
+			}
+		}
+		
 		p1_turn = !p1_turn;
 	} else
 		SEGGER_RTT_WriteString(0, "\nNo more moves may be made on this column\n");
@@ -166,10 +253,10 @@ static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t lengt
 	//Check player status and input
 	if(p1_turn)
 		SEGGER_RTT_WriteString(0, "But it's not their turn yet!\n");
-	else if(num < 0 || num >= COLS)
+	else if(num < 0 || num >= WIDTH)
 		SEGGER_RTT_WriteString(0, "That's not a valid column!\n");
 	else 
-		updateGame(num, discs[num]);
+		addToColumn(num);
 }
 /**@snippet [Handling the data received over BLE] */
 
@@ -547,18 +634,18 @@ static void Color2_Write(uint8_t rgb) {
  */
 static void timer_handler(void * p_context) {
 	nrf_gpio_pin_set(OE);
-	Row_Write(row);
+	Row_Write(curr_height);
 
     for(uint8_t i = 0; i < RBG_WIDTH; i++) { //assume start is zero
         if(i < WIDTH) {
 			//Draw top half
-			if(row < 8) {
-				if(row == 0)
-					Color_Write(home[i]); //draw current cursor position
+			if(curr_height < 8) {
+				if(curr_height == 0)
+					Color_Write(p1_home[i]); //draw current cursor position
 				else
-					Color_Write(game[i][row - 1]); //i and row are switched, otherwise it'd draw horizontially
+					Color_Write(game[curr_height - 1][i]); //i and row are switched, otherwise it'd draw horizontially
 			} else { //Draw bottom half
-				Color2_Write(game[i][row - 1]); 
+				Color2_Write(game[curr_height - 1][i]); 
 			}
         } else { //Blank the rest out
             Color_Write(0);
@@ -573,7 +660,7 @@ static void timer_handler(void * p_context) {
     nrf_gpio_pin_clear(LAT);
     nrf_gpio_pin_clear(OE);
     
-	row = row == ROWS ? 0 : row + 1;
+	curr_height = curr_height == HEIGHT ? 0 : curr_height + 1;
 }
 
 
@@ -602,10 +689,11 @@ static void gpio_init(void) {
  */
 void game_init(void) {
 	memset(discs, 0, sizeof discs); 
-	memset(home, 0, sizeof home);
-	home[0] = RED;
-	memset(game, 0, sizeof(game[0][0]) * COLS * ROWS);
-	whichInput = row = i = disc_pos = 0;
+	memset(p1_home, 0, sizeof p1_home);
+	p1_home[0] = RED;
+	
+	memset(game, 0, sizeof(game[0][0]) * WIDTH * HEIGHT);
+	p1_disc_col = 0;
 	p1_turn = true;
 	
 	//Print instructions
@@ -620,22 +708,22 @@ void moveDisc(int8_t whichInput) {
     //Respond to keystroke
     switch(whichInput) {
         case LEFT:
-            if(disc_pos > 0) {
-                home[disc_pos--] = 0;
-                home[disc_pos] = RED;
-            } 
+            if(p1_disc_col > 0) {
+                p1_home[p1_disc_col--] = 0;
+                p1_home[p1_disc_col] = RED;
+            }
             break;
         case RIGHT:
-            if(disc_pos < WIDTH-1) {    
-                home[disc_pos++] = 0;
-                home[disc_pos] = RED;
-            }    
+            if(p1_disc_col < WIDTH-1) {    
+                p1_home[p1_disc_col++] = 0;
+                p1_home[p1_disc_col] = RED;
+            }
             break;
         case HOME:
-            if(disc_pos != 0) {
-                home[disc_pos] = 0;
-                disc_pos = 0;
-                home[disc_pos] = RED;
+            if(p1_disc_col != 0) {
+                p1_home[p1_disc_col] = 0;
+                p1_disc_col = 0;
+                p1_home[p1_disc_col] = RED;
             }
             break;
         case DOWN: //Update discs then game array
@@ -644,7 +732,7 @@ void moveDisc(int8_t whichInput) {
 			else if(!p1_turn)
 				SEGGER_RTT_WriteString(0, "\nUnable to place disc, not your turn yet!\n");
 			else
-				updateGame(disc_pos, discs[disc_pos]);
+				addToColumn(p1_disc_col);
             break;
 		case RESET:
 		case CLEAR:
@@ -688,8 +776,7 @@ int main(void)
     APP_ERROR_CHECK(err_code);
 
     // Enter main loop.
-    for (;;)
-    {
+    for (;;) {
         power_manage();
 		moveDisc(getInput());
     }
