@@ -3,9 +3,6 @@
 
 #include "nrf_gpio.h"
 
-//FSM declarations
-enum STATES {INIT, CONNECT, CONNECTED, PLAYER1, PLAYER2, SENDDATA, WAIT_FOR_DATA} state;
-
 //Constants
 #define BLUE 1
 #define RED 4
